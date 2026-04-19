@@ -1,0 +1,113 @@
+# -----------------------------------------------------------------------------
+# Build outputs
+# -----------------------------------------------------------------------------
+build/
+build-*/
+cmake-build-*/
+out/
+Builds/
+JuceLibraryCode/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+!cmake/*.cmake
+
+# Compiled plugin artefacts (built locally, distributed via releases)
+*.vst3
+*.component
+*.aaxplugin
+*.clap
+*.lv2
+
+# -----------------------------------------------------------------------------
+# Compiled objects & libraries
+# -----------------------------------------------------------------------------
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.exp
+*.pdb
+*.ilk
+
+# -----------------------------------------------------------------------------
+# IDE / editor
+# -----------------------------------------------------------------------------
+.vscode/
+.idea/
+.vs/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.suo
+*.user
+*.ncb
+*.sdf
+*.swp
+*.swo
+*~
+.ccls-cache/
+.clangd/
+compile_commands.json
+
+# -----------------------------------------------------------------------------
+# OS cruft
+# -----------------------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# -----------------------------------------------------------------------------
+# Debug / crash
+# -----------------------------------------------------------------------------
+*.dSYM/
+*.su
+*.idb
+crash.log
+
+# -----------------------------------------------------------------------------
+# Plugin validation output
+# -----------------------------------------------------------------------------
+pluginval*.json
+pluginval*.xml
+auval-*.log
+
+# -----------------------------------------------------------------------------
+# Secrets and local env
+# -----------------------------------------------------------------------------
+.env
+.env.local
+*.p12
+*.mobileprovision
+signing/*.key
+signing/*.crt
+
+# -----------------------------------------------------------------------------
+# Dependency submodules / vendored libs (pulled via CMake FetchContent)
+# -----------------------------------------------------------------------------
+third_party/JUCE/
+third_party/clap-juce-extensions/
+third_party/libmysofa/
+
+# -----------------------------------------------------------------------------
+# Keep shipped resources tracked
+# -----------------------------------------------------------------------------
+!resources/
+!resources/hrtf/
+!resources/hrtf/*.sofa
