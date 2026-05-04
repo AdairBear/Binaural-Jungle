@@ -60,8 +60,8 @@ BinauralJungleForgeProcessor::createParameterLayout()
 
 void BinauralJungleForgeProcessor::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
 {
-    voice.prepare (sampleRate);
-    pullParametersToVoice();
+    voices.prepare (sampleRate);
+    pullParametersToVoices();
 }
 
 void BinauralJungleForgeProcessor::releaseResources() {}
@@ -73,15 +73,15 @@ bool BinauralJungleForgeProcessor::isBusesLayoutSupported (const BusesLayout& la
         || mainOut == juce::AudioChannelSet::mono();
 }
 
-void BinauralJungleForgeProcessor::pullParametersToVoice()
+void BinauralJungleForgeProcessor::pullParametersToVoices()
 {
     const auto wfIndex = static_cast<int> (
         apvts.getRawParameterValue (param::waveform)->load());
 
-    voice.setWaveform (wfIndex == 0 ? Oscillator::Waveform::Saw
-                                    : Oscillator::Waveform::Square);
+    voices.setWaveform (wfIndex == 0 ? Oscillator::Waveform::Saw
+                                     : Oscillator::Waveform::Square);
 
-    voice.setEnvelopeParameters (
+    voices.setEnvelopeParameters (
         apvts.getRawParameterValue (param::attack)->load(),
         apvts.getRawParameterValue (param::decay)->load(),
         apvts.getRawParameterValue (param::sustain)->load(),
@@ -91,11 +91,11 @@ void BinauralJungleForgeProcessor::pullParametersToVoice()
 void BinauralJungleForgeProcessor::handleMidi (const juce::MidiMessage& msg)
 {
     if (msg.isNoteOn())
-        voice.noteOn (msg.getNoteNumber(), msg.getFloatVelocity());
+        voices.noteOn (msg.getNoteNumber(), msg.getFloatVelocity());
     else if (msg.isNoteOff())
-        voice.noteOff (msg.getNoteNumber());
+        voices.noteOff (msg.getNoteNumber());
     else if (msg.isAllNotesOff() || msg.isAllSoundOff())
-        voice.allNotesOff();
+        voices.allNotesOff();
 }
 
 void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffer,
@@ -109,7 +109,7 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
     for (int ch = 0; ch < numChannels; ++ch)
         buffer.clear (ch, 0, numSamples);
 
-    pullParametersToVoice();
+    pullParametersToVoices();
 
     const auto gainLin = juce::Decibels::decibelsToGain (
         apvts.getRawParameterValue (param::gain)->load());
@@ -126,7 +126,7 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
 
         for (int i = sampleIndex; i < nextEventOffset; ++i)
         {
-            const auto sample = voice.renderNextSample() * gainLin;
+            const auto sample = voices.renderNextSample() * gainLin;
             for (int ch = 0; ch < numChannels; ++ch)
                 buffer.setSample (ch, i, sample);
         }
