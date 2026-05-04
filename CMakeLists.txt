@@ -50,7 +50,9 @@ juce_add_plugin(BinauralJungleForge
 
 target_sources(BinauralJungleForge PRIVATE
     src/app/PluginProcessor.cpp
-    src/app/PluginEditor.cpp)
+    src/app/PluginEditor.cpp
+    src/dsp/voice/Oscillator.cpp
+    src/dsp/voice/Voice.cpp)
 
 target_include_directories(BinauralJungleForge PRIVATE
     ${CMAKE_SOURCE_DIR}/src)
@@ -70,3 +72,16 @@ target_link_libraries(BinauralJungleForge
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Smoke tests — run after every build to verify the audio path.
+# ───────────────────────────────────────────────────────────────────────────────
+add_executable(VoiceSmokeTest
+    tests/voice_smoke_test.cpp
+    src/dsp/voice/Voice.cpp
+    src/dsp/voice/Oscillator.cpp)
+
+target_link_libraries(VoiceSmokeTest PRIVATE
+    juce::juce_audio_basics
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)

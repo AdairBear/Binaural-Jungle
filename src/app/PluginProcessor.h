@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "../dsp/voice/Voice.h"
+
 namespace bjf
 {
 
@@ -35,7 +37,16 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    juce::AudioProcessorValueTreeState apvts;
+
 private:
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
+    void pullParametersToVoice();
+    void handleMidi (const juce::MidiMessage& msg);
+
+    Voice voice;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BinauralJungleForgeProcessor)
 };
 
