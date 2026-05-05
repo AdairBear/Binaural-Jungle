@@ -23,6 +23,14 @@ void Oscillator::resetPhase() noexcept
     phase = 0.0;
 }
 
+void Oscillator::setPhase (float phase01) noexcept
+{
+    auto p = static_cast<double> (phase01);
+    p -= static_cast<double> (static_cast<long long> (p)); // wrap to [0, 1) for non-negative inputs
+    if (p < 0.0) p += 1.0;
+    phase = p;
+}
+
 float Oscillator::renderNextSample() noexcept
 {
     float out = 0.0f;

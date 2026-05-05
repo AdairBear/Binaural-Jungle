@@ -3,9 +3,10 @@
 namespace bjf
 {
 
-// Naive (non-band-limited) oscillator. Aliases at high frequencies — fine for
-// step-2 smoke-test; replace with PolyBLEP / band-limited generator when we
-// build OscillatorStack in step 4.
+// Naive (non-band-limited) oscillator. Aliases at high frequencies — acceptable
+// for the v1 prototype; PolyBLEP / band-limited generation is a follow-up.
+// Used as a single voice in step 2 and as a unit cell of OscillatorStack from
+// step 4 onward.
 class Oscillator
 {
 public:
@@ -15,6 +16,7 @@ public:
     void setFrequency (float hz) noexcept;
     void setWaveform (Waveform w) noexcept;
     void resetPhase() noexcept;
+    void setPhase (float phase01) noexcept;
 
     float renderNextSample() noexcept;
 

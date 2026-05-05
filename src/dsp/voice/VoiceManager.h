@@ -28,6 +28,13 @@ public:
     void allNotesOff();
 
     void setWaveform (Oscillator::Waveform w) noexcept;
+    void setStackSize (int count) noexcept;
+    void setDetuneCents (float cents) noexcept;
+
+    void setFilterType (Filter::Type t) noexcept;
+    void setFilterCutoff (float hz) noexcept;
+    void setFilterResonance (float q) noexcept;
+
     void setEnvelopeParameters (float attackSec, float decaySec,
                                 float sustainLevel, float releaseSec);
 

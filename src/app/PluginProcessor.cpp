@@ -5,12 +5,17 @@ namespace bjf
 {
 namespace param
 {
-    constexpr auto waveform = "waveform";
-    constexpr auto attack   = "amp_attack";
-    constexpr auto decay    = "amp_decay";
-    constexpr auto sustain  = "amp_sustain";
-    constexpr auto release  = "amp_release";
-    constexpr auto gain     = "gain";
+    constexpr auto waveform     = "waveform";
+    constexpr auto stackSize    = "osc_stack_size";
+    constexpr auto detuneCents  = "osc_detune_cents";
+    constexpr auto filterType   = "filter_type";
+    constexpr auto filterCutoff = "filter_cutoff";
+    constexpr auto filterReso   = "filter_resonance";
+    constexpr auto attack       = "amp_attack";
+    constexpr auto decay        = "amp_decay";
+    constexpr auto sustain      = "amp_sustain";
+    constexpr auto release      = "amp_release";
+    constexpr auto gain         = "gain";
 }
 
 BinauralJungleForgeProcessor::BinauralJungleForgeProcessor()
@@ -30,6 +35,28 @@ BinauralJungleForgeProcessor::createParameterLayout()
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { param::waveform, 1 }, "Waveform",
         juce::StringArray { "Saw", "Square" }, 0));
+
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { param::stackSize, 1 }, "Stack Size",
+        1, OscillatorStack::kMaxOscs, 3));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { param::detuneCents, 1 }, "Detune",
+        juce::NormalisableRange<float> { 0.0f, 50.0f }, 7.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("cents")));
+
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { param::filterType, 1 }, "Filter Type",
+        juce::StringArray { "Low Pass", "Band Pass", "High Pass" }, 0));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { param::filterCutoff, 1 }, "Cutoff",
+        juce::NormalisableRange<float> { 20.0f, 20000.0f, 0.0f, 0.25f }, 1200.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("Hz")));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { param::filterReso, 1 }, "Resonance",
+        juce::NormalisableRange<float> { 0.1f, 10.0f, 0.0f, 0.5f }, 0.707f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { param::attack, 1 }, "Attack",
@@ -80,6 +107,19 @@ void BinauralJungleForgeProcessor::pullParametersToVoices()
 
     voices.setWaveform (wfIndex == 0 ? Oscillator::Waveform::Saw
                                      : Oscillator::Waveform::Square);
+
+    voices.setStackSize (static_cast<int> (
+        apvts.getRawParameterValue (param::stackSize)->load()));
+    voices.setDetuneCents (apvts.getRawParameterValue (param::detuneCents)->load());
+
+    const auto ftIndex = static_cast<int> (
+        apvts.getRawParameterValue (param::filterType)->load());
+    voices.setFilterType (ftIndex == 0 ? Filter::Type::LowPass
+                          : ftIndex == 1 ? Filter::Type::BandPass
+                                         : Filter::Type::HighPass);
+
+    voices.setFilterCutoff    (apvts.getRawParameterValue (param::filterCutoff)->load());
+    voices.setFilterResonance (apvts.getRawParameterValue (param::filterReso)->load());
 
     voices.setEnvelopeParameters (
         apvts.getRawParameterValue (param::attack)->load(),

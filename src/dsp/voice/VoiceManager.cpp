@@ -52,6 +52,36 @@ void VoiceManager::setWaveform (Oscillator::Waveform w) noexcept
         v.setWaveform (w);
 }
 
+void VoiceManager::setStackSize (int count) noexcept
+{
+    for (auto& v : voices)
+        v.setStackSize (count);
+}
+
+void VoiceManager::setDetuneCents (float cents) noexcept
+{
+    for (auto& v : voices)
+        v.setDetuneCents (cents);
+}
+
+void VoiceManager::setFilterType (Filter::Type t) noexcept
+{
+    for (auto& v : voices)
+        v.setFilterType (t);
+}
+
+void VoiceManager::setFilterCutoff (float hz) noexcept
+{
+    for (auto& v : voices)
+        v.setFilterCutoff (hz);
+}
+
+void VoiceManager::setFilterResonance (float q) noexcept
+{
+    for (auto& v : voices)
+        v.setFilterResonance (q);
+}
+
 void VoiceManager::setEnvelopeParameters (float a, float d, float s, float r)
 {
     for (auto& v : voices)

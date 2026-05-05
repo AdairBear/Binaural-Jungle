@@ -51,7 +51,9 @@ juce_add_plugin(BinauralJungleForge
 target_sources(BinauralJungleForge PRIVATE
     src/app/PluginProcessor.cpp
     src/app/PluginEditor.cpp
+    src/dsp/voice/Filter.cpp
     src/dsp/voice/Oscillator.cpp
+    src/dsp/voice/OscillatorStack.cpp
     src/dsp/voice/Voice.cpp
     src/dsp/voice/VoiceManager.cpp)
 
@@ -79,21 +81,45 @@ target_link_libraries(BinauralJungleForge
 # ───────────────────────────────────────────────────────────────────────────────
 add_executable(VoiceSmokeTest
     tests/voice_smoke_test.cpp
-    src/dsp/voice/Voice.cpp
-    src/dsp/voice/Oscillator.cpp)
+    src/dsp/voice/Filter.cpp
+    src/dsp/voice/Oscillator.cpp
+    src/dsp/voice/OscillatorStack.cpp
+    src/dsp/voice/Voice.cpp)
 
 target_link_libraries(VoiceSmokeTest PRIVATE
     juce::juce_audio_basics
+    juce::juce_dsp
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
 add_executable(VoiceManagerSmokeTest
     tests/voice_manager_smoke_test.cpp
-    src/dsp/voice/VoiceManager.cpp
+    src/dsp/voice/Filter.cpp
+    src/dsp/voice/Oscillator.cpp
+    src/dsp/voice/OscillatorStack.cpp
     src/dsp/voice/Voice.cpp
-    src/dsp/voice/Oscillator.cpp)
+    src/dsp/voice/VoiceManager.cpp)
 
 target_link_libraries(VoiceManagerSmokeTest PRIVATE
     juce::juce_audio_basics
+    juce::juce_dsp
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+add_executable(OscillatorStackSmokeTest
+    tests/oscillator_stack_smoke_test.cpp
+    src/dsp/voice/Oscillator.cpp
+    src/dsp/voice/OscillatorStack.cpp)
+
+target_link_libraries(OscillatorStackSmokeTest PRIVATE
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+add_executable(FilterSmokeTest
+    tests/filter_smoke_test.cpp
+    src/dsp/voice/Filter.cpp)
+
+target_link_libraries(FilterSmokeTest PRIVATE
+    juce::juce_dsp
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
