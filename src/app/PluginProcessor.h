@@ -2,8 +2,10 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "../dsp/spatial/BinauralLSDecoder.h"
 #include "../dsp/spatial/HOAEncoder.h"
 #include "../dsp/spatial/SimpleStereoDecoder.h"
+#include "../dsp/spatial/SOFALoader.h"
 #include "../dsp/voice/VoiceManager.h"
 
 namespace bjf
@@ -48,9 +50,13 @@ private:
     void pullSpatialParameters();
     void handleMidi (const juce::MidiMessage& msg);
 
+    void loadDefaultHRTFs (double sampleRate);
+
     VoiceManager voices;
     spatial::HOAEncoder           encoder;
-    spatial::SimpleStereoDecoder  decoder;
+    spatial::SimpleStereoDecoder  fallbackDecoder;
+    spatial::SOFALoader           sofaLoader;
+    spatial::BinauralLSDecoder    lsDecoder;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BinauralJungleForgeProcessor)
 };

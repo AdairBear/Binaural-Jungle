@@ -1,6 +1,12 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include "../dsp/spatial/DecoderMatrix.h"
+
+#ifndef BJF_DEFAULT_SOFA_PATH
+ #define BJF_DEFAULT_SOFA_PATH ""
+#endif
+
 namespace bjf
 {
 namespace param
@@ -97,11 +103,72 @@ BinauralJungleForgeProcessor::createParameterLayout()
     return layout;
 }
 
-void BinauralJungleForgeProcessor::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
+void BinauralJungleForgeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     voices.prepare (sampleRate);
     pullParametersToVoices();
     pullSpatialParameters();
+
+    lsDecoder.prepare (sampleRate, samplesPerBlock);
+    loadDefaultHRTFs (sampleRate);
+}
+
+void BinauralJungleForgeProcessor::loadDefaultHRTFs (double /*sampleRate*/)
+{
+    const juce::String defaultPath { BJF_DEFAULT_SOFA_PATH };
+    if (defaultPath.isEmpty())
+        return;
+
+    const auto status = sofaLoader.loadFromFile (defaultPath.toStdString());
+    if (! status.success)
+    {
+        juce::Logger::writeToLog ("BJF: SOFA load failed (" + juce::String (status.message) + ")");
+        return;
+    }
+
+    // Marshal directions and HRIRs into flat arrays the solver expects.
+    const int M = sofaLoader.getNumDirections();
+    const int N = sofaLoader.getFilterLength();
+    const int R = sofaLoader.getNumReceivers();
+
+    std::vector<float> dirs (static_cast<std::size_t> (M) * 2);
+    for (int m = 0; m < M; ++m)
+    {
+        float az = 0.0f, el = 0.0f;
+        sofaLoader.getDirection (m, az, el);
+        dirs[static_cast<std::size_t> (m) * 2 + 0] = az;
+        dirs[static_cast<std::size_t> (m) * 2 + 1] = el;
+    }
+
+    std::vector<float> hrirs (static_cast<std::size_t> (M)
+                              * static_cast<std::size_t> (R)
+                              * static_cast<std::size_t> (N));
+    for (int m = 0; m < M; ++m)
+    {
+        for (int r = 0; r < R; ++r)
+        {
+            const float* src = sofaLoader.getHRIR (m, r);
+            if (src == nullptr) continue;
+            const std::size_t dstOffset = (static_cast<std::size_t> (m)
+                                            * static_cast<std::size_t> (R)
+                                          + static_cast<std::size_t> (r))
+                                         * static_cast<std::size_t> (N);
+            std::copy_n (src, N, hrirs.begin() + static_cast<std::ptrdiff_t> (dstOffset));
+        }
+    }
+
+    const auto result = spatial::solveLSDecoder (dirs.data(), hrirs.data(), M, R, N);
+    if (! result.success)
+    {
+        juce::Logger::writeToLog ("BJF: LS decoder solve failed");
+        return;
+    }
+
+    lsDecoder.setFilters (result.filters.data(), result.filterLength);
+    juce::Logger::writeToLog ("BJF: SOFA loaded — "
+                              + juce::String (M) + " directions, "
+                              + juce::String (N) + " taps @ "
+                              + juce::String (sofaLoader.getSampleRate()) + " Hz");
 }
 
 void BinauralJungleForgeProcessor::releaseResources() {}
@@ -183,6 +250,8 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
     auto* outL = buffer.getWritePointer (0);
     auto* outR = (numChannels > 1) ? buffer.getWritePointer (1) : nullptr;
 
+    const bool useHRTF = lsDecoder.isReady();
+
     auto midiIt = midiMessages.cbegin();
     int sampleIndex = 0;
 
@@ -200,7 +269,10 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
             encoder.encodeSample (mono, hoaSample);
 
             float l = 0.0f, r = 0.0f;
-            decoder.decodeSample (hoaSample, l, r);
+            if (useHRTF)
+                lsDecoder.decodeSample        (hoaSample, l, r);
+            else
+                fallbackDecoder.decodeSample  (hoaSample, l, r);
 
             if (outR != nullptr)
             {
