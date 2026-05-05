@@ -38,10 +38,25 @@ public:
     void setEnvelopeParameters (float attackSec, float decaySec,
                                 float sustainLevel, float releaseSec);
 
+    // Distributes the voice pool around `(centerAz, centerEl)` covering an
+    // angular range of `spreadAz` × `spreadEl` (all radians). Each voice
+    // slot gets a deterministic position, so noteOn/noteOff don't scramble
+    // the spatial layout — slot i is always at the same offset relative to
+    // center. spreadAz = 2π gives a full ring; 0 collapses every voice to
+    // the centre. The (i + 0.5)/N quantisation prevents endpoints from
+    // colliding when the spread reaches a full circle.
+    void setSpatial (float centerAzRad, float centerElRad,
+                     float spreadAzRad, float spreadElRad) noexcept;
+
     // Sum of all active voices, mono. Caller is responsible for headroom —
     // 16 voices summed straight can exceed unity; the master gain stage
     // attenuates downstream.
     float renderNextSample() noexcept;
+
+    // Sum of all active voices in the HOA domain (16 channels, ACN/SN3D).
+    // Each voice encodes itself at its own (az, el) before summing, so the
+    // resulting bus carries the full spread of the polyphonic image.
+    void renderNextHoaSample (float* hoa16) noexcept;
 
     int getActiveVoiceCount() const noexcept;
 

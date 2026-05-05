@@ -1,5 +1,7 @@
 #include "VoiceManager.h"
 
+#include "../spatial/HOACoefficients.h"
+
 namespace bjf
 {
 
@@ -88,12 +90,36 @@ void VoiceManager::setEnvelopeParameters (float a, float d, float s, float r)
         v.setEnvelopeParameters (a, d, s, r);
 }
 
+void VoiceManager::setSpatial (float centerAzRad, float centerElRad,
+                               float spreadAzRad, float spreadElRad) noexcept
+{
+    constexpr float invN = 1.0f / static_cast<float> (kMaxVoices);
+    for (int i = 0; i < kMaxVoices; ++i)
+    {
+        // t ∈ (-0.5, +0.5), evenly spaced with no endpoint collision when
+        // spread covers a full circle.
+        const float t  = (static_cast<float> (i) + 0.5f) * invN - 0.5f;
+        const float az = centerAzRad + spreadAzRad * t;
+        const float el = centerElRad + spreadElRad * t;
+        voices[static_cast<std::size_t> (i)].setSpatialPosition (az, el);
+    }
+}
+
 float VoiceManager::renderNextSample() noexcept
 {
     float sum = 0.0f;
     for (auto& v : voices)
         sum += v.renderNextSample();
     return sum;
+}
+
+void VoiceManager::renderNextHoaSample (float* hoa16) noexcept
+{
+    for (int c = 0; c < spatial::kNumHoaChannels; ++c)
+        hoa16[c] = 0.0f;
+
+    for (auto& v : voices)
+        v.addNextHoaSample (hoa16);
 }
 
 int VoiceManager::getActiveVoiceCount() const noexcept

@@ -115,6 +115,8 @@ target_link_libraries(BinauralJungleForge
 # ───────────────────────────────────────────────────────────────────────────────
 add_executable(VoiceSmokeTest
     tests/voice_smoke_test.cpp
+    src/dsp/spatial/HOACoefficients.cpp
+    src/dsp/spatial/HOAEncoder.cpp
     src/dsp/voice/Filter.cpp
     src/dsp/voice/Oscillator.cpp
     src/dsp/voice/OscillatorStack.cpp
@@ -128,6 +130,8 @@ target_link_libraries(VoiceSmokeTest PRIVATE
 
 add_executable(VoiceManagerSmokeTest
     tests/voice_manager_smoke_test.cpp
+    src/dsp/spatial/HOACoefficients.cpp
+    src/dsp/spatial/HOAEncoder.cpp
     src/dsp/voice/Filter.cpp
     src/dsp/voice/Oscillator.cpp
     src/dsp/voice/OscillatorStack.cpp
@@ -135,6 +139,22 @@ add_executable(VoiceManagerSmokeTest
     src/dsp/voice/VoiceManager.cpp)
 
 target_link_libraries(VoiceManagerSmokeTest PRIVATE
+    juce::juce_audio_basics
+    juce::juce_dsp
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+add_executable(VoiceSpreadSmokeTest
+    tests/voice_spread_smoke_test.cpp
+    src/dsp/spatial/HOACoefficients.cpp
+    src/dsp/spatial/HOAEncoder.cpp
+    src/dsp/voice/Filter.cpp
+    src/dsp/voice/Oscillator.cpp
+    src/dsp/voice/OscillatorStack.cpp
+    src/dsp/voice/Voice.cpp
+    src/dsp/voice/VoiceManager.cpp)
+
+target_link_libraries(VoiceSpreadSmokeTest PRIVATE
     juce::juce_audio_basics
     juce::juce_dsp
     juce::juce_recommended_config_flags

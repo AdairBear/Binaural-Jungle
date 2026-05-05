@@ -64,6 +64,11 @@ void Voice::setEnvelopeParameters (float a, float d, float s, float r)
     adsr.setParameters (adsrParams);
 }
 
+void Voice::setSpatialPosition (float azRad, float elRad) noexcept
+{
+    encoder.setPosition (azRad, elRad);
+}
+
 float Voice::renderNextSample() noexcept
 {
     if (! adsr.isActive())
@@ -72,6 +77,17 @@ float Voice::renderNextSample() noexcept
     const auto env = adsr.getNextSample();
     const auto raw = oscStack.renderNextSample();
     return filter.process (raw) * env * velocityGain;
+}
+
+void Voice::addNextHoaSample (float* hoa16) noexcept
+{
+    if (! adsr.isActive())
+        return;
+
+    const auto mono  = renderNextSample();
+    const auto* coef = encoder.getCoefficients();
+    for (int i = 0; i < spatial::kNumHoaChannels; ++i)
+        hoa16[i] += mono * coef[i];
 }
 
 } // namespace bjf

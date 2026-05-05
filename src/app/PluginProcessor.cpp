@@ -21,9 +21,11 @@ namespace param
     constexpr auto decay        = "amp_decay";
     constexpr auto sustain      = "amp_sustain";
     constexpr auto release      = "amp_release";
-    constexpr auto spatialAz    = "spatial_az";
-    constexpr auto spatialEl    = "spatial_el";
-    constexpr auto gain         = "gain";
+    constexpr auto spatialAz       = "spatial_az";
+    constexpr auto spatialEl       = "spatial_el";
+    constexpr auto spatialSpreadAz = "spatial_spread_az";
+    constexpr auto spatialSpreadEl = "spatial_spread_el";
+    constexpr auto gain            = "gain";
 }
 
 BinauralJungleForgeProcessor::BinauralJungleForgeProcessor()
@@ -93,6 +95,16 @@ BinauralJungleForgeProcessor::createParameterLayout()
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { param::spatialEl, 1 }, "Elevation",
         juce::NormalisableRange<float> { -90.0f, 90.0f }, 0.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("\xc2\xb0")));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { param::spatialSpreadAz, 1 }, "Spread Azimuth",
+        juce::NormalisableRange<float> { 0.0f, 360.0f }, 0.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("\xc2\xb0")));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { param::spatialSpreadEl, 1 }, "Spread Elevation",
+        juce::NormalisableRange<float> { 0.0f, 180.0f }, 0.0f,
         juce::AudioParameterFloatAttributes().withLabel ("\xc2\xb0")));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -211,9 +223,12 @@ void BinauralJungleForgeProcessor::pullParametersToVoices()
 void BinauralJungleForgeProcessor::pullSpatialParameters()
 {
     constexpr float deg2rad = 0.017453292519943295f;
-    const auto azDeg = apvts.getRawParameterValue (param::spatialAz)->load();
-    const auto elDeg = apvts.getRawParameterValue (param::spatialEl)->load();
-    encoder.setPosition (azDeg * deg2rad, elDeg * deg2rad);
+    const auto azDeg       = apvts.getRawParameterValue (param::spatialAz)->load();
+    const auto elDeg       = apvts.getRawParameterValue (param::spatialEl)->load();
+    const auto spreadAzDeg = apvts.getRawParameterValue (param::spatialSpreadAz)->load();
+    const auto spreadElDeg = apvts.getRawParameterValue (param::spatialSpreadEl)->load();
+    voices.setSpatial (azDeg * deg2rad,       elDeg * deg2rad,
+                       spreadAzDeg * deg2rad, spreadElDeg * deg2rad);
 }
 
 void BinauralJungleForgeProcessor::handleMidi (const juce::MidiMessage& msg)
@@ -264,15 +279,18 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
 
         for (int i = sampleIndex; i < nextEventOffset; ++i)
         {
-            const auto mono = voices.renderNextSample() * gainLin;
-
-            encoder.encodeSample (mono, hoaSample);
+            // Each voice encodes itself into HOA at its own (az, el); the
+            // pool sums in the HOA domain before the single shared decode.
+            voices.renderNextHoaSample (hoaSample);
 
             float l = 0.0f, r = 0.0f;
             if (useHRTF)
                 lsDecoder.decodeSample        (hoaSample, l, r);
             else
                 fallbackDecoder.decodeSample  (hoaSample, l, r);
+
+            l *= gainLin;
+            r *= gainLin;
 
             if (outR != nullptr)
             {
