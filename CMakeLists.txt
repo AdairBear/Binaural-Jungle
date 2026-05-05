@@ -51,6 +51,9 @@ juce_add_plugin(BinauralJungleForge
 target_sources(BinauralJungleForge PRIVATE
     src/app/PluginProcessor.cpp
     src/app/PluginEditor.cpp
+    src/dsp/spatial/HOACoefficients.cpp
+    src/dsp/spatial/HOAEncoder.cpp
+    src/dsp/spatial/SimpleStereoDecoder.cpp
     src/dsp/voice/Filter.cpp
     src/dsp/voice/Oscillator.cpp
     src/dsp/voice/OscillatorStack.cpp
@@ -121,5 +124,23 @@ add_executable(FilterSmokeTest
 
 target_link_libraries(FilterSmokeTest PRIVATE
     juce::juce_dsp
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+add_executable(HOACoefficientsSmokeTest
+    tests/hoa_coefficients_smoke_test.cpp
+    src/dsp/spatial/HOACoefficients.cpp)
+
+target_link_libraries(HOACoefficientsSmokeTest PRIVATE
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+add_executable(SpatialPipelineSmokeTest
+    tests/spatial_pipeline_smoke_test.cpp
+    src/dsp/spatial/HOACoefficients.cpp
+    src/dsp/spatial/HOAEncoder.cpp
+    src/dsp/spatial/SimpleStereoDecoder.cpp)
+
+target_link_libraries(SpatialPipelineSmokeTest PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)

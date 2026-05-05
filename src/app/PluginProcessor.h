@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "../dsp/spatial/HOAEncoder.h"
+#include "../dsp/spatial/SimpleStereoDecoder.h"
 #include "../dsp/voice/VoiceManager.h"
 
 namespace bjf
@@ -43,9 +45,12 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     void pullParametersToVoices();
+    void pullSpatialParameters();
     void handleMidi (const juce::MidiMessage& msg);
 
     VoiceManager voices;
+    spatial::HOAEncoder           encoder;
+    spatial::SimpleStereoDecoder  decoder;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BinauralJungleForgeProcessor)
 };

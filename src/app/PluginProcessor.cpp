@@ -15,6 +15,8 @@ namespace param
     constexpr auto decay        = "amp_decay";
     constexpr auto sustain      = "amp_sustain";
     constexpr auto release      = "amp_release";
+    constexpr auto spatialAz    = "spatial_az";
+    constexpr auto spatialEl    = "spatial_el";
     constexpr auto gain         = "gain";
 }
 
@@ -78,6 +80,16 @@ BinauralJungleForgeProcessor::createParameterLayout()
         juce::AudioParameterFloatAttributes().withLabel ("s")));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { param::spatialAz, 1 }, "Azimuth",
+        juce::NormalisableRange<float> { -180.0f, 180.0f }, 0.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("\xc2\xb0"))); // °
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { param::spatialEl, 1 }, "Elevation",
+        juce::NormalisableRange<float> { -90.0f, 90.0f }, 0.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("\xc2\xb0")));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { param::gain, 1 }, "Gain",
         juce::NormalisableRange<float> { -60.0f, 6.0f, 0.01f }, -6.0f,
         juce::AudioParameterFloatAttributes().withLabel ("dB")));
@@ -89,6 +101,7 @@ void BinauralJungleForgeProcessor::prepareToPlay (double sampleRate, int /*sampl
 {
     voices.prepare (sampleRate);
     pullParametersToVoices();
+    pullSpatialParameters();
 }
 
 void BinauralJungleForgeProcessor::releaseResources() {}
@@ -128,6 +141,14 @@ void BinauralJungleForgeProcessor::pullParametersToVoices()
         apvts.getRawParameterValue (param::release)->load());
 }
 
+void BinauralJungleForgeProcessor::pullSpatialParameters()
+{
+    constexpr float deg2rad = 0.017453292519943295f;
+    const auto azDeg = apvts.getRawParameterValue (param::spatialAz)->load();
+    const auto elDeg = apvts.getRawParameterValue (param::spatialEl)->load();
+    encoder.setPosition (azDeg * deg2rad, elDeg * deg2rad);
+}
+
 void BinauralJungleForgeProcessor::handleMidi (const juce::MidiMessage& msg)
 {
     if (msg.isNoteOn())
@@ -150,9 +171,17 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
         buffer.clear (ch, 0, numSamples);
 
     pullParametersToVoices();
+    pullSpatialParameters();
 
     const auto gainLin = juce::Decibels::decibelsToGain (
         apvts.getRawParameterValue (param::gain)->load());
+
+    // Spatial scratch — stack-allocated, per-sample scratchpad. Allocates
+    // nothing on the audio thread.
+    float hoaSample[spatial::kNumHoaChannels];
+
+    auto* outL = buffer.getWritePointer (0);
+    auto* outR = (numChannels > 1) ? buffer.getWritePointer (1) : nullptr;
 
     auto midiIt = midiMessages.cbegin();
     int sampleIndex = 0;
@@ -166,9 +195,22 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
 
         for (int i = sampleIndex; i < nextEventOffset; ++i)
         {
-            const auto sample = voices.renderNextSample() * gainLin;
-            for (int ch = 0; ch < numChannels; ++ch)
-                buffer.setSample (ch, i, sample);
+            const auto mono = voices.renderNextSample() * gainLin;
+
+            encoder.encodeSample (mono, hoaSample);
+
+            float l = 0.0f, r = 0.0f;
+            decoder.decodeSample (hoaSample, l, r);
+
+            if (outR != nullptr)
+            {
+                outL[i] = l;
+                outR[i] = r;
+            }
+            else
+            {
+                outL[i] = 0.5f * (l + r);
+            }
         }
 
         sampleIndex = nextEventOffset;
