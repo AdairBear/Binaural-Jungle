@@ -79,6 +79,7 @@ target_sources(BinauralJungleForge PRIVATE
     src/app/PluginEditor.cpp
     src/dsp/spatial/BinauralLSDecoder.cpp
     src/dsp/spatial/DecoderMatrix.cpp
+    src/dsp/spatial/EarlyReflections.cpp
     src/dsp/spatial/HOACoefficients.cpp
     src/dsp/spatial/HOAEncoder.cpp
     src/dsp/spatial/SimpleStereoDecoder.cpp
@@ -221,5 +222,14 @@ target_compile_definitions(BinauralLSDecoderSmokeTest PRIVATE
 
 target_link_libraries(BinauralLSDecoderSmokeTest PRIVATE
     mysofa-static
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+add_executable(EarlyReflectionsSmokeTest
+    tests/early_reflections_smoke_test.cpp
+    src/dsp/spatial/EarlyReflections.cpp
+    src/dsp/spatial/HOACoefficients.cpp)
+
+target_link_libraries(EarlyReflectionsSmokeTest PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)

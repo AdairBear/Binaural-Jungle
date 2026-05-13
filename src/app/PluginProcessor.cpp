@@ -25,6 +25,9 @@ namespace param
     constexpr auto spatialEl       = "spatial_el";
     constexpr auto spatialSpreadAz = "spatial_spread_az";
     constexpr auto spatialSpreadEl = "spatial_spread_el";
+    constexpr auto erRoomSize      = "er_room_size";
+    constexpr auto erWallDamping   = "er_wall_damping";
+    constexpr auto erMix           = "er_mix";
     constexpr auto gain            = "gain";
 }
 
@@ -108,6 +111,19 @@ BinauralJungleForgeProcessor::createParameterLayout()
         juce::AudioParameterFloatAttributes().withLabel ("\xc2\xb0")));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { param::erRoomSize, 1 }, "ER Room Size",
+        juce::NormalisableRange<float> { 1.0f, 30.0f, 0.0f, 0.5f }, 8.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("m")));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { param::erWallDamping, 1 }, "ER Wall Damping",
+        juce::NormalisableRange<float> { 0.0f, 1.0f }, 0.3f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { param::erMix, 1 }, "ER Mix",
+        juce::NormalisableRange<float> { 0.0f, 1.0f }, 0.0f));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { param::gain, 1 }, "Gain",
         juce::NormalisableRange<float> { -60.0f, 6.0f, 0.01f }, -6.0f,
         juce::AudioParameterFloatAttributes().withLabel ("dB")));
@@ -120,6 +136,8 @@ void BinauralJungleForgeProcessor::prepareToPlay (double sampleRate, int samples
     voices.prepare (sampleRate);
     pullParametersToVoices();
     pullSpatialParameters();
+
+    earlyReflections.prepare (sampleRate);
 
     lsDecoder.prepare (sampleRate, samplesPerBlock);
     loadDefaultHRTFs (sampleRate);
@@ -229,6 +247,10 @@ void BinauralJungleForgeProcessor::pullSpatialParameters()
     const auto spreadElDeg = apvts.getRawParameterValue (param::spatialSpreadEl)->load();
     voices.setSpatial (azDeg * deg2rad,       elDeg * deg2rad,
                        spreadAzDeg * deg2rad, spreadElDeg * deg2rad);
+
+    earlyReflections.setRoomSize    (apvts.getRawParameterValue (param::erRoomSize)->load());
+    earlyReflections.setWallDamping (apvts.getRawParameterValue (param::erWallDamping)->load());
+    earlyReflections.setMix         (apvts.getRawParameterValue (param::erMix)->load());
 }
 
 void BinauralJungleForgeProcessor::handleMidi (const juce::MidiMessage& msg)
@@ -282,6 +304,11 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
             // Each voice encodes itself into HOA at its own (az, el); the
             // pool sums in the HOA domain before the single shared decode.
             voices.renderNextHoaSample (hoaSample);
+
+            // Early reflections: image-source model adds reflections to the
+            // HOA bus in-place. The reverb-chain insertion point — when the
+            // FDN diffuse tail lands, the same ER feed becomes its driver.
+            earlyReflections.processSample (hoaSample, hoaSample);
 
             float l = 0.0f, r = 0.0f;
             if (useHRTF)
