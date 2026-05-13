@@ -1,6 +1,9 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_utils/juce_audio_utils.h>
+
+#include <atomic>
 
 #include "../dsp/spatial/BinauralLSDecoder.h"
 #include "../dsp/spatial/EarlyReflections.h"
@@ -42,6 +45,16 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState apvts;
+
+    // GUI keyboard state — the editor's MidiKeyboardComponent writes to this,
+    // processBlock merges its notes into the host MIDI buffer each block.
+    juce::MidiKeyboardState keyboardState;
+
+    // Per-block peak readout for the editor's level meter. Audio thread
+    // writes (relaxed, single-writer), message thread reads — atomic is the
+    // only sync needed.
+    std::atomic<float> outputPeakL { 0.0f };
+    std::atomic<float> outputPeakR { 0.0f };
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

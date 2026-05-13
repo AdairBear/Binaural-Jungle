@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "ParameterIDs.h"
 
 #include "../dsp/spatial/DecoderMatrix.h"
 
@@ -9,27 +10,6 @@
 
 namespace bjf
 {
-namespace param
-{
-    constexpr auto waveform     = "waveform";
-    constexpr auto stackSize    = "osc_stack_size";
-    constexpr auto detuneCents  = "osc_detune_cents";
-    constexpr auto filterType   = "filter_type";
-    constexpr auto filterCutoff = "filter_cutoff";
-    constexpr auto filterReso   = "filter_resonance";
-    constexpr auto attack       = "amp_attack";
-    constexpr auto decay        = "amp_decay";
-    constexpr auto sustain      = "amp_sustain";
-    constexpr auto release      = "amp_release";
-    constexpr auto spatialAz       = "spatial_az";
-    constexpr auto spatialEl       = "spatial_el";
-    constexpr auto spatialSpreadAz = "spatial_spread_az";
-    constexpr auto spatialSpreadEl = "spatial_spread_el";
-    constexpr auto erRoomSize      = "er_room_size";
-    constexpr auto erWallDamping   = "er_wall_damping";
-    constexpr auto erMix           = "er_mix";
-    constexpr auto gain            = "gain";
-}
 
 BinauralJungleForgeProcessor::BinauralJungleForgeProcessor()
     : AudioProcessor (BusesProperties()
@@ -43,90 +23,101 @@ BinauralJungleForgeProcessor::~BinauralJungleForgeProcessor() = default;
 juce::AudioProcessorValueTreeState::ParameterLayout
 BinauralJungleForgeProcessor::createParameterLayout()
 {
+    using FloatRange    = juce::NormalisableRange<float>;
+    using FloatAttrs    = juce::AudioParameterFloatAttributes;
+    using ParameterID   = juce::ParameterID;
+
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    layout.add (std::make_unique<juce::AudioParameterChoice> (
-        juce::ParameterID { param::waveform, 1 }, "Waveform",
-        juce::StringArray { "Saw", "Square" }, 0));
+    auto addChoice = [&] (const char* id, const juce::String& name,
+                          juce::StringArray choices, int defaultIndex)
+    {
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            ParameterID { id, 1 }, name, std::move (choices), defaultIndex));
+    };
+    auto addInt = [&] (const char* id, const juce::String& name,
+                       int lo, int hi, int dflt)
+    {
+        layout.add (std::make_unique<juce::AudioParameterInt> (
+            ParameterID { id, 1 }, name, lo, hi, dflt));
+    };
+    auto addFloat = [&] (const char* id, const juce::String& name,
+                         FloatRange range, float dflt,
+                         const juce::String& unit = {})
+    {
+        FloatAttrs attrs;
+        if (unit.isNotEmpty()) attrs = attrs.withLabel (unit);
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            ParameterID { id, 1 }, name, range, dflt, attrs));
+    };
 
-    layout.add (std::make_unique<juce::AudioParameterInt> (
-        juce::ParameterID { param::stackSize, 1 }, "Stack Size",
-        1, OscillatorStack::kMaxOscs, 3));
+    // ── Oscillator ─────────────────────────────────────────────────────────
+    addChoice (pid::waveform,     "Waveform",  { "Saw", "Square" }, 0);
+    addInt    (pid::oscOctave,    "Octave",    -2, 2, 0);
+    addFloat  (pid::detuneCents,  "Detune",    FloatRange { 0.0f, 50.0f }, 7.0f, "cents");
+    addFloat  (pid::oscPhase,     "Phase",     FloatRange { 0.0f, 1.0f }, 0.0f);
+    addInt    (pid::stackSize,    "Stack Size", 1, OscillatorStack::kMaxOscs, 3);
+    addFloat  (pid::oscSpread,    "Spread",    FloatRange { 0.0f, 1.0f }, 0.3f);
 
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::detuneCents, 1 }, "Detune",
-        juce::NormalisableRange<float> { 0.0f, 50.0f }, 7.0f,
-        juce::AudioParameterFloatAttributes().withLabel ("cents")));
+    // ── Granular ───────────────────────────────────────────────────────────
+    addChoice (pid::granSample,   "Sample",
+               { "—", "Slot 1", "Slot 2", "Slot 3", "Slot 4" }, 0);
+    addFloat  (pid::granDensity,  "Density",  FloatRange { 0.0f, 1.0f }, 0.4f);
+    addFloat  (pid::granSizeMs,   "Grain",    FloatRange { 1.0f, 500.0f, 0.0f, 0.4f }, 60.0f, "ms");
+    addFloat  (pid::granPitch,    "Pitch",    FloatRange { -24.0f, 24.0f, 0.01f }, 0.0f, "st");
+    addFloat  (pid::granScatter,  "Scatter",  FloatRange { 0.0f, 1.0f }, 0.2f);
+    addFloat  (pid::granSpray,    "Spray",    FloatRange { 0.0f, 1.0f }, 0.1f);
+    addFloat  (pid::granMix,      "Mix",      FloatRange { 0.0f, 1.0f }, 0.0f);
 
-    layout.add (std::make_unique<juce::AudioParameterChoice> (
-        juce::ParameterID { param::filterType, 1 }, "Filter Type",
-        juce::StringArray { "Low Pass", "Band Pass", "High Pass" }, 0));
+    // ── Filter ─────────────────────────────────────────────────────────────
+    addChoice (pid::filterType,      "Filter Type",
+               { "Low Pass", "Band Pass", "High Pass" }, 0);
+    addFloat  (pid::filterCutoff,    "Cutoff",
+               FloatRange { 20.0f, 20000.0f, 0.0f, 0.25f }, 1200.0f, "Hz");
+    addFloat  (pid::filterReso,      "Resonance",
+               FloatRange { 0.1f, 10.0f, 0.0f, 0.5f }, 0.707f);
+    addFloat  (pid::filterEnvAmount, "Env Amount", FloatRange { -1.0f, 1.0f }, 0.0f);
+    addFloat  (pid::filterKeyTrack,  "Key Track",  FloatRange {  0.0f, 1.0f }, 0.0f);
+    addFloat  (pid::filterDrive,     "Drive",      FloatRange {  0.0f, 1.0f }, 0.0f);
 
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::filterCutoff, 1 }, "Cutoff",
-        juce::NormalisableRange<float> { 20.0f, 20000.0f, 0.0f, 0.25f }, 1200.0f,
-        juce::AudioParameterFloatAttributes().withLabel ("Hz")));
+    // ── Amp envelope (DAHDSR) ──────────────────────────────────────────────
+    addFloat  (pid::envDelay, "Delay",   FloatRange { 0.0f,  2.0f, 0.0f, 0.3f }, 0.0f,  "s");
+    addFloat  (pid::attack,   "Attack",  FloatRange { 0.001f, 4.0f, 0.0f, 0.3f }, 0.01f, "s");
+    addFloat  (pid::envHold,  "Hold",    FloatRange { 0.0f,  2.0f, 0.0f, 0.3f }, 0.0f,  "s");
+    addFloat  (pid::decay,    "Decay",   FloatRange { 0.001f, 4.0f, 0.0f, 0.3f }, 0.2f,  "s");
+    addFloat  (pid::sustain,  "Sustain", FloatRange { 0.0f,  1.0f }, 0.7f);
+    addFloat  (pid::release,  "Release", FloatRange { 0.001f, 8.0f, 0.0f, 0.3f }, 0.5f,  "s");
+    addFloat  (pid::envCurve, "Curve",   FloatRange { 0.0f,  1.0f }, 0.5f);
 
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::filterReso, 1 }, "Resonance",
-        juce::NormalisableRange<float> { 0.1f, 10.0f, 0.0f, 0.5f }, 0.707f));
+    // ── Spatial ────────────────────────────────────────────────────────────
+    addFloat  (pid::spatialAz,       "Azimuth",
+               FloatRange { -180.0f, 180.0f }, 0.0f, "\xc2\xb0");
+    addFloat  (pid::spatialEl,       "Elevation",
+               FloatRange { -90.0f, 90.0f }, 0.0f, "\xc2\xb0");
+    addFloat  (pid::spatialSpreadAz, "Spread Azimuth",
+               FloatRange { 0.0f, 360.0f }, 0.0f, "\xc2\xb0");
+    addFloat  (pid::spatialSpreadEl, "Spread Elevation",
+               FloatRange { 0.0f, 180.0f }, 0.0f, "\xc2\xb0");
 
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::attack, 1 }, "Attack",
-        juce::NormalisableRange<float> { 0.001f, 4.0f, 0.0f, 0.3f }, 0.01f,
-        juce::AudioParameterFloatAttributes().withLabel ("s")));
+    // ── Early reflections ──────────────────────────────────────────────────
+    addFloat  (pid::erRoomSize,    "ER Room Size",
+               FloatRange { 1.0f, 30.0f, 0.0f, 0.5f }, 8.0f, "m");
+    addFloat  (pid::erWallDamping, "ER Wall Damping", FloatRange { 0.0f, 1.0f }, 0.3f);
+    addFloat  (pid::erMix,         "ER Mix",          FloatRange { 0.0f, 1.0f }, 0.0f);
 
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::decay, 1 }, "Decay",
-        juce::NormalisableRange<float> { 0.001f, 4.0f, 0.0f, 0.3f }, 0.2f,
-        juce::AudioParameterFloatAttributes().withLabel ("s")));
+    // ── HOA diffuse reverb (panel-only until DSP is wired) ─────────────────
+    addFloat  (pid::revRoomSize,  "Reverb Room",      FloatRange { 0.0f, 1.0f }, 0.5f);
+    addFloat  (pid::revDecay,     "Reverb Decay",     FloatRange { 0.2f, 12.0f, 0.0f, 0.4f }, 2.0f, "s");
+    addFloat  (pid::revDamping,   "Reverb Damping",   FloatRange { 0.0f, 1.0f }, 0.4f);
+    addFloat  (pid::revPreDelay,  "Reverb Pre-Delay", FloatRange { 0.0f, 250.0f, 0.0f, 0.4f }, 20.0f, "ms");
+    addFloat  (pid::revDiffusion, "Reverb Diffusion", FloatRange { 0.0f, 1.0f }, 0.7f);
+    addFloat  (pid::revWetDry,    "Reverb Wet/Dry",   FloatRange { 0.0f, 1.0f }, 0.25f);
 
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::sustain, 1 }, "Sustain",
-        juce::NormalisableRange<float> { 0.0f, 1.0f }, 0.7f));
-
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::release, 1 }, "Release",
-        juce::NormalisableRange<float> { 0.001f, 8.0f, 0.0f, 0.3f }, 0.5f,
-        juce::AudioParameterFloatAttributes().withLabel ("s")));
-
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::spatialAz, 1 }, "Azimuth",
-        juce::NormalisableRange<float> { -180.0f, 180.0f }, 0.0f,
-        juce::AudioParameterFloatAttributes().withLabel ("\xc2\xb0"))); // °
-
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::spatialEl, 1 }, "Elevation",
-        juce::NormalisableRange<float> { -90.0f, 90.0f }, 0.0f,
-        juce::AudioParameterFloatAttributes().withLabel ("\xc2\xb0")));
-
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::spatialSpreadAz, 1 }, "Spread Azimuth",
-        juce::NormalisableRange<float> { 0.0f, 360.0f }, 0.0f,
-        juce::AudioParameterFloatAttributes().withLabel ("\xc2\xb0")));
-
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::spatialSpreadEl, 1 }, "Spread Elevation",
-        juce::NormalisableRange<float> { 0.0f, 180.0f }, 0.0f,
-        juce::AudioParameterFloatAttributes().withLabel ("\xc2\xb0")));
-
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::erRoomSize, 1 }, "ER Room Size",
-        juce::NormalisableRange<float> { 1.0f, 30.0f, 0.0f, 0.5f }, 8.0f,
-        juce::AudioParameterFloatAttributes().withLabel ("m")));
-
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::erWallDamping, 1 }, "ER Wall Damping",
-        juce::NormalisableRange<float> { 0.0f, 1.0f }, 0.3f));
-
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::erMix, 1 }, "ER Mix",
-        juce::NormalisableRange<float> { 0.0f, 1.0f }, 0.0f));
-
-    layout.add (std::make_unique<juce::AudioParameterFloat> (
-        juce::ParameterID { param::gain, 1 }, "Gain",
-        juce::NormalisableRange<float> { -60.0f, 6.0f, 0.01f }, -6.0f,
-        juce::AudioParameterFloatAttributes().withLabel ("dB")));
+    // ── Master ─────────────────────────────────────────────────────────────
+    addFloat  (pid::gain,   "Gain", FloatRange { -60.0f, 6.0f, 0.01f }, -6.0f, "dB");
+    addFloat  (pid::pan,    "Pan",  FloatRange { -1.0f, 1.0f }, 0.0f);
+    addInt    (pid::voices, "Voices", 1, VoiceManager::kMaxVoices, VoiceManager::kMaxVoices);
+    addFloat  (pid::bpm,    "BPM",  FloatRange { 40.0f, 240.0f }, 120.0f, "bpm");
 
     return layout;
 }
@@ -156,7 +147,6 @@ void BinauralJungleForgeProcessor::loadDefaultHRTFs (double /*sampleRate*/)
         return;
     }
 
-    // Marshal directions and HRIRs into flat arrays the solver expects.
     const int M = sofaLoader.getNumDirections();
     const int N = sofaLoader.getFilterLength();
     const int R = sofaLoader.getNumReceivers();
@@ -213,44 +203,44 @@ bool BinauralJungleForgeProcessor::isBusesLayoutSupported (const BusesLayout& la
 void BinauralJungleForgeProcessor::pullParametersToVoices()
 {
     const auto wfIndex = static_cast<int> (
-        apvts.getRawParameterValue (param::waveform)->load());
+        apvts.getRawParameterValue (pid::waveform)->load());
 
     voices.setWaveform (wfIndex == 0 ? Oscillator::Waveform::Saw
                                      : Oscillator::Waveform::Square);
 
     voices.setStackSize (static_cast<int> (
-        apvts.getRawParameterValue (param::stackSize)->load()));
-    voices.setDetuneCents (apvts.getRawParameterValue (param::detuneCents)->load());
+        apvts.getRawParameterValue (pid::stackSize)->load()));
+    voices.setDetuneCents (apvts.getRawParameterValue (pid::detuneCents)->load());
 
     const auto ftIndex = static_cast<int> (
-        apvts.getRawParameterValue (param::filterType)->load());
+        apvts.getRawParameterValue (pid::filterType)->load());
     voices.setFilterType (ftIndex == 0 ? Filter::Type::LowPass
                           : ftIndex == 1 ? Filter::Type::BandPass
                                          : Filter::Type::HighPass);
 
-    voices.setFilterCutoff    (apvts.getRawParameterValue (param::filterCutoff)->load());
-    voices.setFilterResonance (apvts.getRawParameterValue (param::filterReso)->load());
+    voices.setFilterCutoff    (apvts.getRawParameterValue (pid::filterCutoff)->load());
+    voices.setFilterResonance (apvts.getRawParameterValue (pid::filterReso)->load());
 
     voices.setEnvelopeParameters (
-        apvts.getRawParameterValue (param::attack)->load(),
-        apvts.getRawParameterValue (param::decay)->load(),
-        apvts.getRawParameterValue (param::sustain)->load(),
-        apvts.getRawParameterValue (param::release)->load());
+        apvts.getRawParameterValue (pid::attack)->load(),
+        apvts.getRawParameterValue (pid::decay)->load(),
+        apvts.getRawParameterValue (pid::sustain)->load(),
+        apvts.getRawParameterValue (pid::release)->load());
 }
 
 void BinauralJungleForgeProcessor::pullSpatialParameters()
 {
     constexpr float deg2rad = 0.017453292519943295f;
-    const auto azDeg       = apvts.getRawParameterValue (param::spatialAz)->load();
-    const auto elDeg       = apvts.getRawParameterValue (param::spatialEl)->load();
-    const auto spreadAzDeg = apvts.getRawParameterValue (param::spatialSpreadAz)->load();
-    const auto spreadElDeg = apvts.getRawParameterValue (param::spatialSpreadEl)->load();
+    const auto azDeg       = apvts.getRawParameterValue (pid::spatialAz)->load();
+    const auto elDeg       = apvts.getRawParameterValue (pid::spatialEl)->load();
+    const auto spreadAzDeg = apvts.getRawParameterValue (pid::spatialSpreadAz)->load();
+    const auto spreadElDeg = apvts.getRawParameterValue (pid::spatialSpreadEl)->load();
     voices.setSpatial (azDeg * deg2rad,       elDeg * deg2rad,
                        spreadAzDeg * deg2rad, spreadElDeg * deg2rad);
 
-    earlyReflections.setRoomSize    (apvts.getRawParameterValue (param::erRoomSize)->load());
-    earlyReflections.setWallDamping (apvts.getRawParameterValue (param::erWallDamping)->load());
-    earlyReflections.setMix         (apvts.getRawParameterValue (param::erMix)->load());
+    earlyReflections.setRoomSize    (apvts.getRawParameterValue (pid::erRoomSize)->load());
+    earlyReflections.setWallDamping (apvts.getRawParameterValue (pid::erWallDamping)->load());
+    earlyReflections.setMix         (apvts.getRawParameterValue (pid::erMix)->load());
 }
 
 void BinauralJungleForgeProcessor::handleMidi (const juce::MidiMessage& msg)
@@ -274,14 +264,26 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
     for (int ch = 0; ch < numChannels; ++ch)
         buffer.clear (ch, 0, numSamples);
 
+    // Merge any notes the GUI keyboard has pressed into the host MIDI buffer
+    // before consuming events. processNextMidiBuffer is the sanctioned bridge
+    // between MidiKeyboardComponent (message thread) and the audio thread.
+    keyboardState.processNextMidiBuffer (midiMessages, 0, numSamples, true);
+
     pullParametersToVoices();
     pullSpatialParameters();
 
     const auto gainLin = juce::Decibels::decibelsToGain (
-        apvts.getRawParameterValue (param::gain)->load());
+        apvts.getRawParameterValue (pid::gain)->load());
 
-    // Spatial scratch — stack-allocated, per-sample scratchpad. Allocates
-    // nothing on the audio thread.
+    // Constant-power pan: at p = 0 both gains are 1/sqrt(2); the master gain
+    // stage above is the only volume adjustment, so the pan law just
+    // redistributes energy between channels without changing perceived level.
+    const auto panNorm = juce::jlimit (-1.0f, 1.0f,
+        apvts.getRawParameterValue (pid::pan)->load());
+    const auto panAngle = (panNorm + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
+    const auto panL = std::cos (panAngle);
+    const auto panR = std::sin (panAngle);
+
     float hoaSample[spatial::kNumHoaChannels];
 
     auto* outL = buffer.getWritePointer (0);
@@ -301,13 +303,7 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
 
         for (int i = sampleIndex; i < nextEventOffset; ++i)
         {
-            // Each voice encodes itself into HOA at its own (az, el); the
-            // pool sums in the HOA domain before the single shared decode.
             voices.renderNextHoaSample (hoaSample);
-
-            // Early reflections: image-source model adds reflections to the
-            // HOA bus in-place. The reverb-chain insertion point — when the
-            // FDN diffuse tail lands, the same ER feed becomes its driver.
             earlyReflections.processSample (hoaSample, hoaSample);
 
             float l = 0.0f, r = 0.0f;
@@ -316,8 +312,8 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
             else
                 fallbackDecoder.decodeSample  (hoaSample, l, r);
 
-            l *= gainLin;
-            r *= gainLin;
+            l *= gainLin * panL;
+            r *= gainLin * panR;
 
             if (outR != nullptr)
             {
@@ -339,6 +335,14 @@ void BinauralJungleForgeProcessor::processBlock (juce::AudioBuffer<float>& buffe
             ++midiIt;
         }
     }
+
+    // Per-block peak update for the meter. Single writer (audio thread),
+    // single reader (UI timer) — relaxed atomics are sufficient.
+    float peakL = 0.0f, peakR = 0.0f;
+    if (outL != nullptr) peakL = buffer.getMagnitude (0, 0, numSamples);
+    if (outR != nullptr) peakR = buffer.getMagnitude (1, 0, numSamples);
+    outputPeakL.store (peakL, std::memory_order_relaxed);
+    outputPeakR.store (peakR, std::memory_order_relaxed);
 }
 
 juce::AudioProcessorEditor* BinauralJungleForgeProcessor::createEditor()
