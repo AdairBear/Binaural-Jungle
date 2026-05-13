@@ -77,6 +77,10 @@ juce_add_plugin(BinauralJungleForge
 target_sources(BinauralJungleForge PRIVATE
     src/app/PluginProcessor.cpp
     src/app/PluginEditor.cpp
+    src/gui/BJFLookAndFeel.cpp
+    src/gui/Controls.cpp
+    src/gui/Panels.cpp
+    src/gui/SpatialPanner.cpp
     src/dsp/spatial/BinauralLSDecoder.cpp
     src/dsp/spatial/DecoderMatrix.cpp
     src/dsp/spatial/EarlyReflections.cpp
@@ -231,5 +235,14 @@ add_executable(EarlyReflectionsSmokeTest
     src/dsp/spatial/HOACoefficients.cpp)
 
 target_link_libraries(EarlyReflectionsSmokeTest PRIVATE
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_warning_flags)
+
+# GUI parameter ID coverage — header-only, no JUCE or DSP linkage. Catches
+# the case where a new GUI panel binds to an ID that was never registered.
+add_executable(GuiParametersSmokeTest
+    tests/gui_parameters_smoke_test.cpp)
+
+target_link_libraries(GuiParametersSmokeTest PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
