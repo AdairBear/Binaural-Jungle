@@ -10,6 +10,7 @@
 #include "../dsp/spatial/SimpleStereoDecoder.h"
 #include "../dsp/spatial/SOFALoader.h"
 #include "../dsp/voice/VoiceManager.h"
+#include "PresetManager.h"
 
 namespace bjf
 {
@@ -45,6 +46,10 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState apvts;
+
+    // Preset manager owns the factory list, the user-preset directory scan,
+    // and is the single writer of APVTS state from outside the audio thread.
+    PresetManager presetManager;
 
     // GUI keyboard state — the editor's MidiKeyboardComponent writes to this,
     // processBlock merges its notes into the host MIDI buffer each block.

@@ -22,7 +22,7 @@ namespace
 
 BinauralJungleForgeEditor::BinauralJungleForgeEditor (BinauralJungleForgeProcessor& p)
     : AudioProcessorEditor (&p), processorRef (p),
-      topBar          (p.apvts),
+      topBar          (p.apvts, p.presetManager),
       spatialPanner   (p.apvts, pid::spatialAz, pid::spatialEl,
                        pid::spatialSpreadAz, pid::spatialSpreadEl,
                        pid::voices),
@@ -67,11 +67,11 @@ void BinauralJungleForgeEditor::timerCallback()
 
 void BinauralJungleForgeEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (gui::theme::background);
+    g.fillAll (theme::background);
 
     // Hairline separators echo the prototype's panel chrome.
     const auto bounds = getLocalBounds().toFloat();
-    g.setColour (gui::theme::border);
+    g.setColour (theme::border);
     g.drawRect (bounds, 1.0f);
 }
 
