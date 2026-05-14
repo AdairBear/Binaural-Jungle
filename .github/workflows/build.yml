@@ -138,7 +138,7 @@ jobs:
       - name: Verify universal binary
         run: |
           set -e
-          BIN="build/BinauralJungleForge_artefacts/VST3/Binaural Jungle Forge.vst3/Contents/MacOS/Binaural Jungle Forge"
+          BIN="build/BinauralJungleForge_artefacts/Release/VST3/Binaural Jungle Forge.vst3/Contents/MacOS/Binaural Jungle Forge"
           file "$BIN"
           archs=$(lipo -archs "$BIN")
           echo "Architectures: $archs"
@@ -154,12 +154,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BinauralJungleForge-VST3-macOS
-          path: build/BinauralJungleForge_artefacts/VST3/Binaural Jungle Forge.vst3
+          path: build/BinauralJungleForge_artefacts/Release/VST3/Binaural Jungle Forge.vst3
           if-no-files-found: error
 
       - name: Upload AU
         uses: actions/upload-artifact@v4
         with:
           name: BinauralJungleForge-AU-macOS
-          path: build/BinauralJungleForge_artefacts/AU/Binaural Jungle Forge.component
+          path: build/BinauralJungleForge_artefacts/Release/AU/Binaural Jungle Forge.component
           if-no-files-found: error
