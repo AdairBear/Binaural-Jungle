@@ -77,6 +77,7 @@ juce_add_plugin(BinauralJungleForge
 target_sources(BinauralJungleForge PRIVATE
     src/app/PluginProcessor.cpp
     src/app/PluginEditor.cpp
+    src/app/PresetManager.cpp
     src/gui/BJFLookAndFeel.cpp
     src/gui/Controls.cpp
     src/gui/Panels.cpp

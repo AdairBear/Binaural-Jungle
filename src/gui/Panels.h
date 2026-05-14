@@ -9,8 +9,41 @@
 
 #include "Controls.h"
 
+namespace bjf { class PresetManager; }
+
 namespace bjf::gui
 {
+
+// ── Preset bar ──────────────────────────────────────────────────────────
+// The strip wedged into the TopBar between the logo and the master cluster:
+// prev / preset name / next / save / init. The name acts as a button that
+// pops a categorised browser menu (Factory > …, User > …) so the user can
+// jump anywhere without cycling.
+class PresetBar final : public juce::Component,
+                        private juce::ChangeListener
+{
+public:
+    explicit PresetBar (bjf::PresetManager& presetManager);
+    ~PresetBar() override;
+
+    void resized() override;
+    void paint (juce::Graphics&) override;
+
+private:
+    void changeListenerCallback (juce::ChangeBroadcaster*) override;
+    void refreshNameDisplay();
+    void openBrowserMenu();
+    void promptForSaveName();
+
+    bjf::PresetManager& presets;
+    juce::TextButton prevBtn   { "<" };
+    juce::TextButton nextBtn   { ">" };
+    juce::TextButton nameBtn   { "Init" };
+    juce::TextButton saveBtn   { "Save" };
+    juce::TextButton initBtn   { "Init" };
+
+    std::unique_ptr<juce::AlertWindow> saveDialog;
+};
 
 // Every right-side panel follows the same skeleton: header chip-toggle or
 // dropdown across the top, a row of knobs below, optionally a custom
@@ -96,18 +129,21 @@ private:
 };
 
 // ── Top bar ──────────────────────────────────────────────────────────────
-// Logo on the left; master volume / pan knobs, voices spinner, and BPM read
-// across the right. All bound to APVTS so host automation reaches them too.
+// Logo on the left; preset bar in the middle (browse / save / init); master
+// volume / pan / voices / bpm cluster on the right. The master controls are
+// bound to APVTS so host automation reaches them too.
 class TopBar final : public juce::Component
 {
 public:
-    explicit TopBar (juce::AudioProcessorValueTreeState& apvts);
+    TopBar (juce::AudioProcessorValueTreeState& apvts,
+            bjf::PresetManager& presetManager);
     void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
     Knob volumeKnob, panKnob, voicesKnob, bpmKnob;
     std::array<std::unique_ptr<detail::SliderAttachment>, 4> attachments;
+    PresetBar presetBar;
 };
 
 // ── Bottom bar ───────────────────────────────────────────────────────────

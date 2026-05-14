@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "../app/ParameterIDs.h"
+#include "../app/PresetManager.h"
 
 namespace bjf::gui
 {
@@ -253,7 +254,7 @@ void EnvelopePanel::paint (juce::Graphics& g)
     g.setColour (theme::track);
     g.fillRoundedRectangle (strip, 4.0f);
 
-    auto norm = [] (const Knob& k)
+    auto norm = [] (Knob& k)
     {
         return static_cast<float> (k.getSlider().valueToProportionOfLength (
             k.getSlider().getValue()));
@@ -346,12 +347,15 @@ void ReverbPanel::resized()
 }
 
 // ─── TopBar ─────────────────────────────────────────────────────────────
-TopBar::TopBar (juce::AudioProcessorValueTreeState& apvts)
+TopBar::TopBar (juce::AudioProcessorValueTreeState& apvts,
+                bjf::PresetManager& presetManager)
     : volumeKnob ("Volume", theme::polaris),
       panKnob    ("Pan",    theme::polaris),
       voicesKnob ("Voices", theme::polaris),
-      bpmKnob    ("BPM",    theme::polaris)
+      bpmKnob    ("BPM",    theme::polaris),
+      presetBar  (presetManager)
 {
+    addAndMakeVisible (presetBar);
     addAndMakeVisible (volumeKnob);
     addAndMakeVisible (panKnob);
     addAndMakeVisible (voicesKnob);
@@ -400,6 +404,16 @@ void TopBar::resized()
     place (panKnob);
     place (voicesKnob);
     place (bpmKnob);
+
+    // Reserve the logo region (~260px) on the left; the preset bar takes
+    // whatever middle gap remains between the logo and the master cluster.
+    constexpr int kLogoWidth = 260;
+    constexpr int kPresetGap = 20;
+    bounds.removeFromLeft (kLogoWidth);
+    auto presetArea = bounds;
+    presetArea.removeFromLeft (kPresetGap);
+    presetArea.removeFromRight (kPresetGap);
+    presetBar.setBounds (presetArea);
 }
 
 // ─── BottomBar ──────────────────────────────────────────────────────────
@@ -436,6 +450,138 @@ void BottomBar::resized()
     bounds.removeFromRight (10);
     keyboard.setBounds (bounds);
     meter.setBounds (meterArea);
+}
+
+// ─── PresetBar ──────────────────────────────────────────────────────────
+PresetBar::PresetBar (bjf::PresetManager& pm)
+    : presets (pm)
+{
+    auto styleChip = [] (juce::TextButton& b, juce::Colour accent)
+    {
+        b.setColour (juce::TextButton::buttonColourId,   theme::track);
+        b.setColour (juce::TextButton::buttonOnColourId, accent.withAlpha (0.4f));
+        b.setColour (juce::TextButton::textColourOffId,  theme::textPrimary);
+        b.setColour (juce::TextButton::textColourOnId,   theme::textPrimary);
+    };
+
+    styleChip (prevBtn, theme::polaris);
+    styleChip (nextBtn, theme::polaris);
+    styleChip (nameBtn, theme::indigo);
+    styleChip (saveBtn, theme::phosphor);
+    styleChip (initBtn, theme::violet);
+
+    prevBtn.onClick = [this] { presets.loadPrevious(); };
+    nextBtn.onClick = [this] { presets.loadNext(); };
+    nameBtn.onClick = [this] { openBrowserMenu(); };
+    saveBtn.onClick = [this] { promptForSaveName(); };
+    initBtn.onClick = [this] { presets.loadInit(); };
+
+    addAndMakeVisible (prevBtn);
+    addAndMakeVisible (nameBtn);
+    addAndMakeVisible (nextBtn);
+    addAndMakeVisible (saveBtn);
+    addAndMakeVisible (initBtn);
+
+    presets.addChangeListener (this);
+    refreshNameDisplay();
+}
+
+PresetBar::~PresetBar()
+{
+    presets.removeChangeListener (this);
+}
+
+void PresetBar::resized()
+{
+    auto bounds = getLocalBounds();
+
+    // Side buttons cap the row; the name button stretches the middle.
+    constexpr int kArrowW = 32;
+    constexpr int kEdgeW  = 56;
+    constexpr int kGap    = 6;
+
+    initBtn.setBounds (bounds.removeFromRight (kEdgeW));
+    bounds.removeFromRight (kGap);
+    saveBtn.setBounds (bounds.removeFromRight (kEdgeW));
+    bounds.removeFromRight (kGap);
+
+    prevBtn.setBounds (bounds.removeFromLeft (kArrowW));
+    bounds.removeFromLeft (kGap);
+    nextBtn.setBounds (bounds.removeFromRight (kArrowW));
+    bounds.removeFromRight (kGap);
+
+    nameBtn.setBounds (bounds);
+}
+
+void PresetBar::paint (juce::Graphics&) {}
+
+void PresetBar::changeListenerCallback (juce::ChangeBroadcaster*)
+{
+    refreshNameDisplay();
+}
+
+void PresetBar::refreshNameDisplay()
+{
+    nameBtn.setButtonText (presets.getCurrentName());
+}
+
+void PresetBar::openBrowserMenu()
+{
+    juce::PopupMenu menu;
+    juce::PopupMenu factoryMenu, userMenu;
+    int hasUser = 0;
+
+    for (int i = 0; i < presets.getNumPresets(); ++i)
+    {
+        const auto& e = presets.getPreset (i);
+        const bool ticked = (i == presets.getCurrentIndex());
+        // Menu item IDs are 1-based; pack the entry index into the id and
+        // unpack in the result callback.
+        if (e.isFactory)
+            factoryMenu.addItem (i + 1, e.name, true, ticked);
+        else
+        {
+            userMenu.addItem (i + 1, e.name, true, ticked);
+            ++hasUser;
+        }
+    }
+
+    menu.addSubMenu ("Factory", factoryMenu);
+    if (hasUser > 0)
+        menu.addSubMenu ("User", userMenu);
+
+    auto opts = juce::PopupMenu::Options().withTargetComponent (&nameBtn);
+    menu.showMenuAsync (opts, [this] (int chosenId)
+    {
+        if (chosenId <= 0) return;
+        presets.loadPreset (chosenId - 1);
+    });
+}
+
+void PresetBar::promptForSaveName()
+{
+    // AlertWindow modal dialog. Lifetime spans the async callback, so we
+    // own it on the heap and release it inside the callback to keep the
+    // GUI thread happy.
+    saveDialog = std::make_unique<juce::AlertWindow> ("Save Preset",
+                                                      "Enter a name for the user preset.",
+                                                      juce::MessageBoxIconType::NoIcon);
+    saveDialog->addTextEditor ("name", "", "Name:");
+    saveDialog->addButton ("Save",   1, juce::KeyPress (juce::KeyPress::returnKey));
+    saveDialog->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    auto* w = saveDialog.get();
+    saveDialog->enterModalState (true,
+        juce::ModalCallbackFunction::create ([this, w] (int result)
+        {
+            if (result == 1)
+            {
+                const auto name = w->getTextEditorContents ("name");
+                presets.saveUserPreset (name);
+            }
+            saveDialog.reset();
+        }),
+        false);
 }
 
 } // namespace bjf::gui

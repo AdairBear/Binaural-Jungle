@@ -14,7 +14,8 @@ namespace bjf
 BinauralJungleForgeProcessor::BinauralJungleForgeProcessor()
     : AudioProcessor (BusesProperties()
         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "PARAMS", createParameterLayout())
+      apvts (*this, nullptr, "PARAMS", createParameterLayout()),
+      presetManager (apvts)
 {
 }
 
