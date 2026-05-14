@@ -1,0 +1,165 @@
+# Continuous integration for Binaural Jungle Forge.
+#
+# Builds the plugin (VST3 + AU) as a universal macOS bundle, runs every
+# smoke test in tests/, and uploads the resulting bundles as workflow
+# artefacts so anyone with a green run can drag-and-drop the build into
+# their VST3/Components folder for a local check.
+#
+# JUCE and libmysofa are pulled by FetchContent the first time and then
+# cached so subsequent runs only rebuild our own code.
+#
+# Cache invalidation rides on the hash of CMakeLists.txt: any bump to
+# JUCE_VERSION / LIBMYSOFA_VERSION there changes the hash and forces a
+# fresh fetch.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-flight runs when a newer commit lands on the same ref. Saves
+# runner time on rapid-fire pushes. The expressions here are GitHub
+# context fields (workflow name, ref) — not user input — so they cannot
+# host workflow-injection payloads.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS universal (arm64 + x86_64)
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    env:
+      CMAKE_GENERATOR: Ninja
+      # macOS deployment target matches CMakeLists' fallback. Keeping it
+      # explicit here means a runner image bump can't silently regress us
+      # to a newer floor.
+      MACOSX_DEPLOYMENT_TARGET: "10.13"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      # ── Caches ──────────────────────────────────────────────────────
+      # ccache wraps the compiler so we get incremental cross-run reuse
+      # of object files. The action handles save+restore around the job.
+      - name: Configure ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: macos-universal-${{ hashFiles('CMakeLists.txt') }}
+          max-size: 1G
+
+      # FetchContent pulls JUCE and libmysofa into third_party/ at
+      # configure time. Caching the directories avoids a fresh git clone
+      # on every run; the libmysofa SOFA payload the SOFA loader test
+      # relies on is part of that cache.
+      - name: Cache FetchContent dependencies
+        id: fc-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            third_party/JUCE
+            third_party/libmysofa
+          key: macos-thirdparty-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            macos-thirdparty-
+
+      # ── Configure ───────────────────────────────────────────────────
+      - name: Configure CMake (universal)
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      # ── Build ───────────────────────────────────────────────────────
+      - name: Build plugin (VST3 + AU)
+        run: cmake --build build --config Release --parallel 4 --target BinauralJungleForge_VST3 BinauralJungleForge_AU
+
+      - name: Build smoke tests
+        run: |
+          cmake --build build --config Release --parallel 4 --target \
+            VoiceSmokeTest \
+            VoiceManagerSmokeTest \
+            VoiceSpreadSmokeTest \
+            OscillatorStackSmokeTest \
+            FilterSmokeTest \
+            HOACoefficientsSmokeTest \
+            SpatialPipelineSmokeTest \
+            SOFALoaderSmokeTest \
+            BinauralLSDecoderSmokeTest \
+            EarlyReflectionsSmokeTest \
+            GuiParametersSmokeTest
+
+      # ── Test ────────────────────────────────────────────────────────
+      # Each smoke test is a stand-alone executable that returns non-zero
+      # on failure. `set -e` aborts the loop the moment one trips, which
+      # surfaces the first regression in the GitHub Actions UI exactly
+      # as a CTest run would.
+      - name: Run smoke tests
+        working-directory: build
+        run: |
+          set -e
+          tests=(
+            VoiceSmokeTest
+            VoiceManagerSmokeTest
+            VoiceSpreadSmokeTest
+            OscillatorStackSmokeTest
+            FilterSmokeTest
+            HOACoefficientsSmokeTest
+            SpatialPipelineSmokeTest
+            SOFALoaderSmokeTest
+            BinauralLSDecoderSmokeTest
+            EarlyReflectionsSmokeTest
+            GuiParametersSmokeTest
+          )
+          for t in "${tests[@]}"; do
+            echo "::group::$t"
+            ./"$t"
+            echo "::endgroup::"
+          done
+
+      # ── Verify universal slices ─────────────────────────────────────
+      # Cheap sanity check that the plugin binary really is universal.
+      # `lipo -archs` prints the architectures present; we assert both
+      # arm64 and x86_64 are there. Catches a silent regression in
+      # CMAKE_OSX_ARCHITECTURES handling.
+      - name: Verify universal binary
+        run: |
+          set -e
+          BIN="build/BinauralJungleForge_artefacts/VST3/Binaural Jungle Forge.vst3/Contents/MacOS/Binaural Jungle Forge"
+          file "$BIN"
+          archs=$(lipo -archs "$BIN")
+          echo "Architectures: $archs"
+          echo "$archs" | grep -q arm64
+          echo "$archs" | grep -q x86_64
+
+      # ── Artefacts ───────────────────────────────────────────────────
+      # Bundle the .vst3 and .component folders verbatim so a reviewer
+      # can install them locally and try the plugin in a host. The path
+      # values quote the spaces in the artefact name without needing a
+      # rename step.
+      - name: Upload VST3
+        uses: actions/upload-artifact@v4
+        with:
+          name: BinauralJungleForge-VST3-macOS
+          path: build/BinauralJungleForge_artefacts/VST3/Binaural Jungle Forge.vst3
+          if-no-files-found: error
+
+      - name: Upload AU
+        uses: actions/upload-artifact@v4
+        with:
+          name: BinauralJungleForge-AU-macOS
+          path: build/BinauralJungleForge_artefacts/AU/Binaural Jungle Forge.component
+          if-no-files-found: error
